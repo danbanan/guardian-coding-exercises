@@ -18,24 +18,30 @@ do {
   print 'Insert token into column: ';
 } while (defined($input = <>) and not insert_token($input, ($. % 2) ? 'o' : 'x'));
 
-say 'Player ', ($. % 2) ? 2 : 1, 'wins';
+say 'Player ', ($. % 2) ? 2 : 1, ' wins';
 
 sub insert_token {
   my ($column, $token) = @_;
 
   unless ($column =~ m/\d+/) {
     printf "\nINVALID INPUT: must be an integer between 0 and %d\n\n", $ncols - 1;
-    return 1;
+    return 0;
   }
 
   my $pos;
+  my $i;
 
-  for (my $i=0; $i<=$#grid; $i += $ncols) {
+  for ($i=0; $i<=$#grid; $i += $ncols) {
       $pos = $i + $column;
       if ($grid[$pos] eq '.') { # Find first available slot
           $grid[$pos] = $token;
           last;
     }
+  }
+
+  if ($i > $#grid) {
+      printf "\nINVALID INPUT: column is full\n\n";
+      return 0;
   }
 
   return is_winning_move($pos, $token);
@@ -44,33 +50,12 @@ sub insert_token {
 sub is_winning_move {
   my ($pos, $token) = @_;
 
-  my $row = $pos / $nrows;
-  my $col = $pos % $ncols;
-
-  my @horizontal = get_horizontal($pos);
-  my @vertical = get_vertical($pos);
-  my @left_diagonal = get_left_diagonal($pos);
-  my @right_diagonal = get_right_diagonal($pos);
-
-  say 'Position ', $pos;
-  say join ',', @horizontal;
-  say join ',', @vertical;
-  say join ',', @left_diagonal;
-  say join ',', @right_diagonal;
-
-  my @lines = map { join '', @grid[@{$_}] } \@horizontal, \@vertical, \@right_diagonal, \@left_diagonal;
-
-  print Dumper \@lines;
+  my @lines = map { join '', @grid[@{$_}] } get_horizontal($pos),
+    get_vertical($pos), get_ascending_diagonal($pos), get_descending_diagonal($pos);
 
   my $regex = qr/${token}{4}/;
 
-  say $regex;
-
-  my $bool = any { m/$regex/ } @lines;
-
-  print Dumper $bool;
-
-  return $bool;
+  return any { m/$regex/ } @lines;
 }
 
 sub get_vertical {
@@ -79,7 +64,7 @@ sub get_vertical {
     my $col = $pos % $ncols;
 
     # Can be optimized since there will never be a token above the current one
-    return split "\n", `seq $col $ncols $#grid`;
+    return [split "\n", `seq $col $ncols $#grid`];
 }
 
 sub get_horizontal {
@@ -88,47 +73,77 @@ sub get_horizontal {
     my $start = $pos - $pos % $ncols;
     my $end = $start + $ncols - 1; # -1 since ranges are inclusive
 
-    return $start..$end;
+    return [$start..$end];
 }
 
-sub get_right_diagonal {
+sub get_ascending_diagonal {
     my $pos = shift;
 
     my $inc = $ncols + 1;
-    my $start = ($pos % $inc) ? $pos % $inc : $inc; # this does not seem right
+    my $start = get_ascending_start($pos);
+    my $end = get_ascending_end($pos);
 
-    my @lines = split "\n", `seq $start $inc $#grid`;
-    my $offset = 0;
-
-    # Walk the list
-    for ($offset; $lines[$offset] % $ncols == $ncols - 1; ++$offset) {}
-
-    return @lines[$offset..$#lines];
+    return [split "\n", `seq $start $inc $end`];
 }
 
-sub get_left_diagonal {
+sub get_descending_diagonal {
     my $pos = shift;
 
     my $inc = $ncols - 1;
-    my $start = $pos % $inc;
+    my $start = get_descending_start($pos);
+    my $end = get_descending_end($pos);
 
-    my @lines = split "\n", `seq $start $inc $#grid`;
-    my $offset = 0;
+    return [split "\n", `seq $start $inc $end`];
+}
 
-    # Walk the list
-    for ($offset; $lines[$offset] % $ncols; ++$offset) {}
+sub get_ascending_start {
+    my $pos = shift;
 
-    my @slice = @lines[$offset..$#lines];
+    my $step = $ncols + 1;
 
-    say "Left diagonal slice: ", @slice;
+    if (($pos < $ncols) or ($pos % $ncols == 0)) {
+	return $pos;
+    }
+    return get_ascending_start($pos - $step);
+}
 
-    return @slice;
+sub get_descending_start {
+    my $pos = shift;
+
+    my $step = $ncols - 1;
+
+    if (($pos < $ncols) or ($pos % $ncols == $ncols - 1)) {
+	return $pos;
+    }
+    return get_descending_start($pos - $step);
+}
+
+sub get_ascending_end {
+    my $pos = shift;
+
+    my $step = $ncols + 1;
+
+    if (($pos > $#grid - $ncols) or ($pos % $ncols == $ncols - 1)) {
+	return $pos;
+    }
+    return get_ascending_end($pos + $step);
+}
+
+sub get_descending_end {
+    my $pos = shift;
+
+    my $step = $ncols - 1;
+
+    if (($pos > $#grid - $ncols) or ($pos % $ncols == 0)) {
+	return $pos;
+    }
+    return get_descending_end($pos + $step);
 }
 
 sub print_grid {
-  say ' ', join ' ', 0..6;
-  for (my $i=$#grid; $i>0; $i -= $ncols) { # Print rows in reverse
-    say '|', join('|', @grid[$i-$ncols+1..$i]), '|';
-  }
-  print "\n";
+    say ' ', join ' ', 0..6;
+    for (my $i=$#grid; $i>0; $i -= $ncols) { # Print rows in reverse
+	say '|', join('|', @grid[$i-$ncols+1..$i]), '|';
+    }
+    print "\n";
 }
